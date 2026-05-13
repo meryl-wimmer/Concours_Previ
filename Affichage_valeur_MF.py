@@ -33,12 +33,12 @@ parser=argparse.ArgumentParser(description="Python script to create netcdf file 
 parser.add_argument("-d","--date",      required=True,help='Date du run (YYMMDDHH)')
 args=parser.parse_args()
 
-root_MF="/cnrm/proc/wimmerm/data_MF/"
+root_MF="./data_MF/"
 
 # ----------------------------------------------
 # Liste de parmaètres
 # ----------------------------------------------
-param=['t2mMIN','t2mMAX','rr','visi']
+param=['t2mMIN','t2mMAX','rr','visi','LITOT']
 
 # ----------------------------------------------
 # Date
@@ -74,9 +74,9 @@ for i_model in ['arpege-4dvarfr','arome-3dvarfr','arome-ifsfr']:
 
   # Noms des variables dans les gribs 
   if model=='arpege':
-    grib_key=[{'shortName':'2t'},{'shortName':'2t'},[{'shortName':'lsrr'}, {'shortName':'crr'}],{'shortName':'minvis'}]
+      grib_key=[{'shortName':'2t'},{'shortName':'2t'},[{'shortName':'lsrr'}, {'shortName':'crr'}],{'shortName':'minvis'},{"parameterCategory":17}]
   else:
-    grib_key=[{'shortName':'2t'},{'shortName':'2t'},{'parameterCategory':1,'parameterNumber':65},{'shortName':'minvis'}]
+    grib_key=[{'shortName':'2t'},{'shortName':'2t'},{'parameterCategory':1,'parameterNumber':65},{'shortName':'minvis'},{"parameterCategory":17}]
 
 
   for i_param,i_grib_key in zip(param,grib_key):
@@ -85,7 +85,7 @@ for i_model in ['arpege-4dvarfr','arome-3dvarfr','arome-ifsfr']:
         date_init=time2str(addtime(run,"%Y%m%d%H",hours=18),"%Y%m%d%H")
         date_fin=time2str(addtime(run,"%Y%m%d%H",days=1,hours=18),"%Y%m%d%H")
         T2mMIN=[]
-
+        step=1
    if i_param=='t2mMAX':
         date_init=time2str(addtime(run,"%Y%m%d%H",days=1,hours=6),"%Y%m%d%H")
         if model=='arpege':
@@ -93,25 +93,47 @@ for i_model in ['arpege-4dvarfr','arome-3dvarfr','arome-ifsfr']:
         if model=='arome':
             date_fin=time2str(addtime(run,"%Y%m%d%H",days=2,hours=0),"%Y%m%d%H")
         T2mMAX=[]
+        step=1
    if i_param=='rr':
         date_init=time2str(addtime(run,"%Y%m%d%H",days=2,hours=0),"%Y%m%d%H")
         date_fin=time2str(addtime(run,"%Y%m%d%H",days=2,hours=0),"%Y%m%d%H")
         RR=[]
+        step=24
    if i_param=='visi':
         date_init=time2str(addtime(run,"%Y%m%d%H",days=1,hours=0),"%Y%m%d%H")
         date_fin=time2str(addtime(run,"%Y%m%d%H",days=2,hours=0),"%Y%m%d%H")
         MinVisi=[]
+        step=1
+   if i_param=='LITOT':
+        if model=='arpege':
+            domaine='glob025'
+        date_init=time2str(addtime(run,"%Y%m%d%H",days=1,hours=0),"%Y%m%d%H")
+        date_fin=time2str(addtime(run,"%Y%m%d%H",days=2,hours=0),"%Y%m%d%H")
+        LITOT=[]
+        step=24
 
    I_ech=int((str2time(date_init,"%Y%m%d%H")-str2time(run,"%Y%m%d%H")).total_seconds()//3600)
    F_ech=int((str2time(date_fin,"%Y%m%d%H")-str2time(run,"%Y%m%d%H")).total_seconds()//3600)
    list_ech=list(range(max(cumulRR,I_ech),F_ech+1, int(step)))
+   if i_param=='rr' or i_param=='LITOT':
+       list_ech=[F_ech]
 
    # Lecture des gribs
    for i_ech in list_ech:
      
     file= "/grid."+model+"-forecast."+domaine+"+"+str(i_ech).zfill(4)+":00.grib"
     file1="/grid."+model+"-forecast."+domaine+"+"+str(i_ech-cumulRR).zfill(4)+":00.grib"
-    if model=='arpege' and i_param=='rr':
+    if model=='arpege' and i_param=='LITOT':
+        datahs=xr.open_dataset(root_MF+name_model+'/'+timeChangeFormat(run,"%Y%m%d%H","%Y%m%dT%H%MP")+file,
+                                engine="cfgrib",decode_timedelta=True,
+                                backend_kwargs={'filter_by_keys': i_grib_key})
+        datah_1s=xr.open_dataset(root_MF+name_model+'/'+timeChangeFormat(run,"%Y%m%d%H","%Y%m%dT%H%MP")+file1,
+                                engine="cfgrib",decode_timedelta=True,
+                                backend_kwargs={'filter_by_keys': i_grib_key})
+        data1=datahs-datah_1s
+        data1['LITOT']=data1['unknown']
+
+    elif model=='arpege' and i_param=='rr':
         datahs=xr.open_dataset(root_MF+name_model+'/'+timeChangeFormat(run,"%Y%m%d%H","%Y%m%dT%H%MP")+file,
                                 engine="cfgrib",decode_timedelta=True,
                                 backend_kwargs={'filter_by_keys': i_grib_key[0]})
@@ -129,6 +151,15 @@ for i_model in ['arpege-4dvarfr','arome-3dvarfr','arome-ifsfr']:
         data1=xr.merge(list_data,compat='no_conflicts')
         data1['rr']=data1['lsrr']+data1['crr']
         
+    elif model=='arome' and i_param=='LITOT':
+        datahs=xr.open_dataset(root_MF+name_model+'/'+timeChangeFormat(run,"%Y%m%d%H","%Y%m%dT%H%MP")+file,
+                                engine="cfgrib",decode_timedelta=True,
+                                backend_kwargs={'filter_by_keys': i_grib_key})
+        datah_1s=xr.open_dataset(root_MF+name_model+'/'+timeChangeFormat(run,"%Y%m%d%H","%Y%m%dT%H%MP")+file1,
+                                engine="cfgrib",decode_timedelta=True,
+                                backend_kwargs={'filter_by_keys': i_grib_key})
+        data1=datahs-datah_1s
+        data1['LITOT']=data1['unknown']
     elif model=='arome' and i_param=='rr':
         datahs=xr.open_dataset(root_MF+name_model+'/'+timeChangeFormat(run,"%Y%m%d%H","%Y%m%dT%H%MP")+file,
                                 engine="cfgrib",decode_timedelta=True,
@@ -145,12 +176,16 @@ for i_model in ['arpege-4dvarfr','arome-3dvarfr','arome-ifsfr']:
     # Lecture des Lon Lat
     lon=data1.longitude.data
     lat=data1.latitude.data
+    lon,lat=np.meshgrid(lon,lat)
 
-    # Distance entre points de grille et position de Blagnac et recherche du point de grille le plus proche
-    lon_diff=np.abs(lon-lon_Blagnac)
-    lat_diff=np.abs(lat-lat_Blagnac)
-    i_lon=np.where(lon_diff==np.min(lon_diff))[0][0]
-    i_lat=np.where(lat_diff==np.min(lat_diff))[0][0]
+    # Distance entre points de grille et position de Blagnac et recherche du point de grille le plus proche ainsi que des points dans un rayon de 16km
+    lon_diff=np.abs(lon-lon_Blagnac)*111*np.cos(np.radians(lat))
+    lat_diff=np.abs(lat-lat_Blagnac)*111
+    dist = np.sqrt(lat_diff**2 + lon_diff**2)
+    i_lat,i_lon=np.unravel_index(np.nanargmin(dist), dist.shape)
+    mask = dist <= 16 #km
+    indices = np.where(mask)
+
 
     # Valeur de T2m, RR et visibilité au point de grille le plus proche de Blagnac
     if i_param=='t2mMIN':
@@ -161,6 +196,8 @@ for i_model in ['arpege-4dvarfr','arome-3dvarfr','arome-ifsfr']:
         RR=float(data1['rr'].data[i_lat,i_lon])
     if i_param=='visi':
        MinVisi.append(float(data1['minvis'].data[i_lat,i_lon]))
+    if i_param=='LITOT':
+       LITOT.append(np.max(data1['LITOT'].data[indices]))
 
   # Affichage des T2m min, T2m max, RR24h, visibilité minimale     
   print(i_model,':')
@@ -168,6 +205,7 @@ for i_model in ['arpege-4dvarfr','arome-3dvarfr','arome-ifsfr']:
   print('\tT2m max:',np.round(max(T2mMAX),2))
   print('\tRR: ',np.round(RR,2))
   print('\tmin visi:',np.round(min(MinVisi),2),  'visibilité < 1000m ? : ', np.round(min(MinVisi),2)<1000)
+  print('\tLITOT: ',np.round(max(LITOT),2))
 
 
 

@@ -31,7 +31,8 @@ parser.add_argument("-d","--domain",        type=str,required=True,help='Domain 
 parser.add_argument("-m","--member",        type=str,required=False,help='Member number if PEARP')
 args=parser.parse_args()
 
-root_MF="/cnrm/proc/wimmerm/data_MF/"
+root_MF="./data_MF/"
+
 
 # Olive name
 exp_Olive=args.exp
@@ -53,7 +54,7 @@ vconf=args.conf
 
 # Date
 date=timeChangeFormat(args.dateR,'%Y%m%d%H','%Y%m%dT%H%MP')
-dateI=addtime(args.dateR,'%Y%m%d%H',hours=18)
+dateI=addtime(args.dateR,'%Y%m%d%H',hours=0)
 if model=='arpege':
     dateF=addtime(args.dateR,'%Y%m%d%H',days=2,hours=6)
 if model=='arome':

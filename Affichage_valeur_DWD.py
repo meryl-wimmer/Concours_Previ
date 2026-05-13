@@ -37,8 +37,7 @@ args=parser.parse_args()
 # ----------------------------------------------
 # Liste de parmaètres
 # ----------------------------------------------
-param=['t2mMIN','t2mMAX','rr','visi']
-grib_key=[{'shortName':'2t'},{'shortName':'2t'},{'shortName':'tp'},{'shortName':'vis'}]
+grib_key=[{'shortName':'2t'},{'shortName':'2t'},{'shortName':'tp'},{'shortName':'vis'},{'shortName':'LPI_CON_MAX'}]
   
 # ----------------------------------------------
 # Date
@@ -69,7 +68,7 @@ for i_model in ['icon','icon-eu','icon-d2']:
      domaine='europe'
      var_lon='RLON'
      var_lat='RLAT'
-     param=['t2mMIN','t2mMAX','rr','visi']
+     param=['t2mMIN','t2mMAX','rr','visi','LPI']
   elif i_model=='icon-d2':
      grid='icosahedral'
      domaine='germany'
@@ -116,6 +115,14 @@ for i_model in ['icon','icon-eu','icon-d2']:
         date_init=time2str(addtime(run,"%Y%m%d%H",days=1,hours=0),"%Y%m%d%H")
         date_fin=time2str(addtime(run,"%Y%m%d%H",days=2,hours=0),"%Y%m%d%H")
         MinVisi=[]
+
+   if i_param=='LPI':
+        if i_model=='icon-eu':
+           var='LPI_CON_MAX'
+        date_init=time2str(addtime(run,"%Y%m%d%H",days=1,hours=0),"%Y%m%d%H")
+        date_fin=time2str(addtime(run,"%Y%m%d%H",days=2,hours=0),"%Y%m%d%H")
+        LPI=[]
+
 
    I_ech=int((str2time(date_init,"%Y%m%d%H")-str2time(run,"%Y%m%d%H")).total_seconds()//3600)
    F_ech=int((str2time(date_fin,"%Y%m%d%H")-str2time(run,"%Y%m%d%H")).total_seconds()//3600)
@@ -164,14 +171,21 @@ for i_model in ['icon','icon-eu','icon-d2']:
                         backend_kwargs={'filter_by_keys':{'shortName':'lat'}}).lat.data
 
     # Distance entre points de grille et position de Blagnac et recherche du point de grille le plus proche
-    diff=(lon-lon_Blagnac)**2 + (lat-lat_Blagnac)**2
+    if np.any(lon > 180):  # Grilles en 0–360°
+        lon = np.where(lon > 180, lon - 360, lon)
+    lat_dist = (lat - lat_Blagnac) * 111.0  # 1° de latitude ≈ 111 km
+    lon_dist = (lon - lon_Blagnac) * 111.0 * np.cos(np.radians(lat))  # 1° de longitude ≈ 111 km * cos(lat)
+    diff=np.sqrt(lat_dist**2 + lon_dist**2)
+    
     if i_model!='icon-eu':
         i=np.where(diff==np.min(diff))[0][0]
     else:
-        diff=(lon-lon_Blagnac)**2 + (lat-lat_Blagnac)**2
         index=np.where(diff==np.min(diff))
         i=index[0]
         j=index[1]
+         
+        mask= diff <=16 # km
+        indices=np.where(mask)
 
     # Valeur de T2m, RR et visibilité au point de grille le plus proche de Blagnac
     if i_param=='t2mMIN':
@@ -197,6 +211,9 @@ for i_model in ['icon','icon-eu','icon-d2']:
             MinVisi.append(float(data1['vis'].data[i]))
         if i_model=='icon-eu':
             MinVisi.append(float(data1['vis'].data[i,j]))
+    if i_param=='LPI':
+        if i_model=='icon-eu':
+            LPI.append(np.max(data1['LPI_CON_MAX'].data[indices]))
 
   # Affichage des T2m min, T2m max, RR24h, visibilité minimale
   print(i_model,':')
@@ -205,6 +222,8 @@ for i_model in ['icon','icon-eu','icon-d2']:
   print('\tRR: ',np.round(RR,2))
   if i_model=='icon-eu' or i_model=='icon-d2':
       print('\tmin visi:',np.round(min(MinVisi),2), 'visibilité < 1000m ? : ', np.round(min(MinVisi),2)<1000)
+  if i_model=='icon-eu':
+      print('\tLPI max:',np.round(max(LPI),2))
 
 
 
